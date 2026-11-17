@@ -1389,7 +1389,7 @@ environment variable always overrides a value set here:
 ZPKG_DIST   = "oci://ghcr.io/go-pkgx/packages"  # signed registry (default)
 ZPKG_VERIFY = true                               # fail-closed signature check
 # ZPKG_DIR    = "/opt/zpkg"
-# ZPKG_PANTRY = "https://raw.githubusercontent.com/pkgxdev/pantry/main/projects"
+# ZPKG_RECIPES = "https://raw.githubusercontent.com/pkgxdev/pantry/main/projects"
 # OCI_TOKEN   = "..."                            # private-registry credentials
 ```
 
@@ -1399,7 +1399,7 @@ because GitHub's container packages are **org-scoped and did not follow the
 repository transfer** — every repository moved and every artifact stayed, so
 that registry is the live one and spelling the new name here would point at an
 empty namespace (it shipped that way once, in v0.64.0 through v0.68.0).
-`ZPKG_PANTRY` defaults to `pkgxdev/pantry` because the resolver still reads it
+`ZPKG_RECIPES` defaults to `pkgxdev/pantry` because the resolver still reads it
 with our own recipes merged over the top (`artifact/zpkg.go:68`).
 
 Both end the same way and in this order: recipes **written** from each

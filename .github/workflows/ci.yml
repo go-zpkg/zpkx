@@ -248,7 +248,7 @@ jobs:
           }
           Write-Host "fixture server is accepting on 127.0.0.1:8199"
           $env:ZPKG_DIST   = "http://127.0.0.1:8199"
-          $env:ZPKG_PANTRY = "http://127.0.0.1:8199"
+          $env:ZPKG_RECIPES = "http://127.0.0.1:8199"
           $env:ZPKG_DIR    = "$PWD\store"
           # This fixture is a static-HTTP dist of UNSIGNED artifacts, and the
           # install path now enforces the fail-closed signature check (artifact#21),
