@@ -12,8 +12,8 @@ github.com/go-compressions/xz v0.3.1 h1:z4U2wNrV71pgUvxkSlBuoZc7JCJ7d+Tb3tSjyMeG
 github.com/go-compressions/xz v0.3.1/go.mod h1:ZbYM2CbKR8SZzq6rqhqlWFnBaXrNhWwQyTSslnYQ0FU=
 github.com/go-test/deep v1.0.3 h1:ZrJSEWsXzPOxaZnFteGEfooLba+ju3FYIbOrS+rQd68=
 github.com/go-test/deep v1.0.3/go.mod h1:wGDj63lr65AM2AQyKZd/NYHGb0R+1RLqB8NKt3aSFNA=
-github.com/go-zpkg/artifact v0.89.0 h1:EQfdKuHTQSiGURS8douGuduLvDls7cs+VN6FhKdnlds=
-github.com/go-zpkg/artifact v0.89.0/go.mod h1:MilO1Sb+8VuQXhDO93ptvi2pNPEUJTFLSYmbSiFJ9t4=
+github.com/go-zpkg/artifact v0.90.0 h1:YqQYjrMVj0bFpu0jMkwW0kWyv/dTI3GjdZHsWcYGEn8=
+github.com/go-zpkg/artifact v0.90.0/go.mod h1:MilO1Sb+8VuQXhDO93ptvi2pNPEUJTFLSYmbSiFJ9t4=
 github.com/google/go-cmp v0.6.0 h1:ofyhxvXcZhMsU5ulbFiLKl/XBFqE1GSq7atu8tAmTRI=
 github.com/google/go-cmp v0.6.0/go.mod h1:17dUlkBOakJ0+DkrSSNjCkIjxS6bF9zb3elmeNGIjoY=
 github.com/hashicorp/hcl/v2 v2.25.0 h1:HmmQVYRny4MaBo4b20TjmL46wyuUxpnMWkPZ4+NTbWk=
