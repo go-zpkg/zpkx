@@ -121,3 +121,59 @@ func TestRunStopsWhenTheSeedIsRefused(t *testing.T) {
 		t.Fatalf("rc=%d stderr=%q", rc, msg)
 	}
 }
+
+func TestTheSeedTravelsToChildrenThroughTheEnvironmentAndNowhereElse(t *testing.T) {
+	t.Setenv("ZPKG_VERIFY", "1")
+	t.Setenv(seedFromEnv_, "")
+	os.Unsetenv(seedFromEnv_)
+	os.Unsetenv(seedLedgerEnv_)
+	var from, ledger string
+	runSeeded("oci://ghcr.io/go-pkgx/packages", "/l/seed.jsonl", func() int {
+		from, ledger = os.Getenv(seedFromEnv_), os.Getenv(seedLedgerEnv_)
+		return 0
+	})
+	if from != "oci://ghcr.io/go-pkgx/packages" || ledger != "/l/seed.jsonl" {
+		t.Fatalf("children would see %q %q", from, ledger)
+	}
+	if _, ok := os.LookupEnv(seedFromEnv_); ok {
+		t.Error("the seed source stayed in the environment after the call")
+	}
+	if _, ok := os.LookupEnv(seedLedgerEnv_); ok {
+		t.Error("the ledger stayed in the environment after the call")
+	}
+	// An earlier value comes back.
+	t.Setenv(seedLedgerEnv_, "before")
+	runSeeded("oci://ghcr.io/go-pkgx/packages", "", func() int { return 0 })
+	if os.Getenv(seedLedgerEnv_) != "before" {
+		t.Errorf("ledger env = %q, want it restored", os.Getenv(seedLedgerEnv_))
+	}
+}
+
+func TestTheEnvironmentSpellingIsTheFlagsSpelling(t *testing.T) {
+	get := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	if f, l, err := seedFromEnv(get(map[string]string{seedFromEnv_: "oci://x", seedLedgerEnv_: "l"})); err != nil || f != "oci://x" || l != "l" {
+		t.Errorf("both: %q %q %v", f, l, err)
+	}
+	if f, l, err := seedFromEnv(get(nil)); err != nil || f != "" || l != "" {
+		t.Errorf("none: %q %q %v", f, l, err)
+	}
+	if _, _, err := seedFromEnv(get(map[string]string{seedLedgerEnv_: "l"})); err == nil {
+		t.Error("a ledger with no seed was accepted")
+	}
+}
+
+func TestRunReadsTheSeedFromTheEnvironmentAndRefusesIt(t *testing.T) {
+	t.Setenv(seedFromEnv_, "http://dist.pkgx.dev")
+	t.Setenv(seedLedgerEnv_, "")
+	var rc int
+	msg := captureStderr(t, func() { rc = run([]string{"-v"}) })
+	if rc != 1 || !strings.Contains(msg, "seed:") {
+		t.Fatalf("rc=%d stderr=%q", rc, msg)
+	}
+	t.Setenv(seedFromEnv_, "")
+	t.Setenv(seedLedgerEnv_, "l")
+	msg = captureStderr(t, func() { rc = run([]string{"-v"}) })
+	if rc != 2 || !strings.Contains(msg, seedLedgerEnv_) {
+		t.Fatalf("rc=%d stderr=%q", rc, msg)
+	}
+}
