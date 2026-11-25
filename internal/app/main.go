@@ -337,6 +337,10 @@ func run(argv []string) int {
 		return 2
 	}
 	plus, rest := splitPlus(argv)
+	if err := refuseUnderSeed(os.Getenv, seedRoot, plus, rest); err != nil {
+		fmt.Fprintln(os.Stderr, pfx()+err.Error())
+		return 2
+	}
 	if lockPath != "" {
 		if len(plus) > 0 {
 			// A lock IS the set. Adding a package means resolving that one

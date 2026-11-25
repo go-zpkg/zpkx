@@ -174,6 +174,45 @@ func TestASeedFlagBelowASeedIsRefused(t *testing.T) {
 	}
 }
 
+// Under a seed, a tool comes from the build's plan. A nested `zpkx +tool`
+// fails closed and names what was asked for and the remedy.
+func TestANestedPackageRequestUnderASeedIsRefused(t *testing.T) {
+	t.Setenv(SeededEnv, "oci://ghcr.io/go-pkgx/packages")
+	var rc int
+	msg := captureStderr(t, func() { rc = run([]string{"+jq", "+curl", "--", "true"}) })
+	if rc != 2 || !strings.Contains(msg, "+jq +curl") || !strings.Contains(msg, "build dependency") {
+		t.Fatalf("rc=%d stderr=%q", rc, msg)
+	}
+	get := func(string) string { return "oci://x" }
+	none := func(string) string { return "" }
+	err := refuseUnderSeed(get, false, nil, []string{"cmd"})
+	if err == nil || !strings.Contains(err.Error(), "cmd would be fetched") {
+		t.Errorf("no plus: %v", err)
+	}
+	err = refuseUnderSeed(get, false, nil, nil)
+	if err == nil || !strings.Contains(err.Error(), "a package set would be fetched") {
+		t.Errorf("nothing named: %v", err)
+	}
+	if err := refuseUnderSeed(get, true, []string{"jq"}, nil); err != nil {
+		t.Errorf("the seed's own root was refused: %v", err)
+	}
+	if err := refuseUnderSeed(none, false, []string{"jq"}, nil); err != nil {
+		t.Errorf("an unseeded run was refused: %v", err)
+	}
+}
+
+// The seed's own invocation is the root; it is marked only while it runs.
+func TestTheSeedRootIsMarkedOnlyWhileItRuns(t *testing.T) {
+	t.Setenv("ZPKG_VERIFY", "1")
+	var during bool
+	captureStderr(t, func() {
+		runSeeded("oci://ghcr.io/go-pkgx/packages", filepath.Join(t.TempDir(), "l"), func() int { during = seedRoot; return 0 })
+	})
+	if !during || seedRoot {
+		t.Fatalf("during=%v after=%v", during, seedRoot)
+	}
+}
+
 func TestASeedWithoutALedgerIsRefusedBeforeItRuns(t *testing.T) {
 	t.Setenv("ZPKG_VERIFY", "1")
 	called := false

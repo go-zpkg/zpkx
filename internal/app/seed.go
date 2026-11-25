@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/go-zpkg/artifact"
 )
@@ -104,6 +105,32 @@ func refuseNestedSeed(getenv func(string) string, from string) error {
 	return nil
 }
 
+// seedRoot is true while the invocation that STARTED the seed runs: it is the
+// one zpkx allowed to install what the build environment is made of.
+var seedRoot bool
+
+// refuseUnderSeed is the refusal of a zpkx that is asked for packages below a
+// seed it did not start. The seed pass gave the build its environment, recorded
+// in a ledger the factory holds and signs into the provenance; a recipe that
+// runs `zpkx +tool` itself would fetch from the ordinary registry, outside that
+// ledger, and the artifact would say it was built from a seed it was not wholly
+// built from. So a build under a seed gets its tools from its PLAN only: the
+// answer is a declared build dependency, not a nested call. It fails closed and
+// names what was asked for.
+func refuseUnderSeed(getenv func(string) string, root bool, plus, rest []string) error {
+	if root || getenv(SeededEnv) == "" {
+		return nil
+	}
+	want := "a package set"
+	switch {
+	case len(plus) > 0:
+		want = "+" + strings.Join(plus, " +")
+	case len(rest) > 0:
+		want = rest[0]
+	}
+	return fmt.Errorf("a seed is in force (%s is set): this build gets its tools from its plan, and %s would be fetched from outside it, unrecorded in the seed ledger. Declare it as a build dependency of the recipe", SeededEnv, want)
+}
+
 // runSeeded runs body with the seed source in force when from is set. The
 // ledger is required: a seed that is not recorded is not installed.
 func runSeeded(from, ledger string, body func() int) int {
@@ -117,6 +144,8 @@ func runSeeded(from, ledger string, body func() int) int {
 	defer setenvRestored(SeededEnv, from)()
 	artifact.SetSeedLedgerFile(ledger)
 	defer artifact.SetSeedLedgerFile("")
+	seedRoot = true
+	defer func() { seedRoot = false }()
 	code := 0
 	if err := artifact.WithSeedSource(from, func() error { code = body(); return nil }); err != nil {
 		fmt.Fprintln(os.Stderr, pfx()+"seed: "+err.Error())
