@@ -2,6 +2,7 @@ package app
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/go-zpkg/artifact"
@@ -59,6 +60,30 @@ func takeSeedFlags(argv []string) (from, ledger string, rest []string, err error
 		return "", "", argv, fmt.Errorf("--seed-ledger needs --seed-from")
 	}
 	return from, ledger, rest, nil
+}
+
+// seedDigest is `zpkx --seed-digest <ledger>`: it prints sha256:<hex>, the
+// digest of the ledger's canonical form, the one `zpkb factory
+// --seed-ledger-sha256` recomputes. The build's OUTSIDE runs it on the ledger
+// the seed install left and records the line, so a recipe that rewrites the
+// ledger afterwards is caught by the factory. An empty or unreadable ledger is
+// an error: the pass installed nothing from its seed.
+func seedDigest(args []string, stdout, stderr io.Writer) int {
+	if len(args) != 1 {
+		fmt.Fprintln(stderr, pfx()+"seed-digest: usage: zpkx --seed-digest <ledger>")
+		return 2
+	}
+	es, err := artifact.ReadSeedLedger(args[0])
+	if err != nil {
+		fmt.Fprintln(stderr, pfx()+"seed-digest: "+err.Error())
+		return 1
+	}
+	if len(es) == 0 {
+		fmt.Fprintf(stderr, "%sseed-digest: ledger %s is empty: the pass installed nothing from its seed\n", pfx(), args[0])
+		return 1
+	}
+	fmt.Fprintf(stdout, "sha256:%s\n", artifact.SeedLedgerDigest(es))
+	return 0
 }
 
 // SeededEnv is the marker zpkx puts in the environment of the command it runs

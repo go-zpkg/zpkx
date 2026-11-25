@@ -284,6 +284,8 @@ func run(argv []string) int {
 	}
 
 	switch argv[0] {
+	case "--seed-digest":
+		return seedDigest(argv[1:], os.Stdout, os.Stderr)
 	case "-h", "--help":
 		fmt.Print(usage)
 		return 0
