@@ -1423,6 +1423,12 @@ version, digest, signers, source) so the factory can name it in the provenance
 of what it builds. Both flags are read only BEFORE the command, never from the
 program's own arguments; `--seed-ledger` without `--seed-from` is an error.
 
+The seed reaches the processes zpkx starts (a factory, and the zpkx a build
+script calls for its own dependencies) through `ZPKX_SEED_FROM` and
+`ZPKX_SEED_LEDGER`, which zpkx sets for the command it runs and which are read
+only when no flag was given; `ZPKX_SEED_LEDGER` without `ZPKX_SEED_FROM` is an
+error. Nothing else carries a seed.
+
 ## Design
 
 Pure Go, cgo disabled. On `FROM scratch` it reads each artifact's ELF `DT_NEEDED`

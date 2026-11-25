@@ -272,6 +272,9 @@ func run(argv []string) int {
 		return 0
 	}
 	seedFrom, seedLedger, argv, serr := takeSeedFlags(argv)
+	if serr == nil && seedFrom == "" && !seedActive {
+		seedFrom, seedLedger, serr = seedFromEnv(os.Getenv)
+	}
 	if serr != nil {
 		fmt.Fprintln(os.Stderr, pfx()+serr.Error())
 		return 2
