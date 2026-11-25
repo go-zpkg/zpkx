@@ -1421,13 +1421,14 @@ nothing else: it is never a dependency source (`ZPKG_DIST` still refuses it),
 and every seed artifact installed is appended to `--seed-ledger` (project,
 version, digest, signers, source) so the factory can name it in the provenance
 of what it builds. Both flags are read only BEFORE the command, never from the
-program's own arguments; `--seed-ledger` without `--seed-from` is an error.
+program's own arguments; `--seed-ledger` is required with `--seed-from`, and
+`--seed-from` is accepted only for the one registry the artifact library pins.
 
-The seed reaches the processes zpkx starts (a factory, and the zpkx a build
-script calls for its own dependencies) through `ZPKX_SEED_FROM` and
-`ZPKX_SEED_LEDGER`, which zpkx sets for the command it runs and which are read
-only when no flag was given; `ZPKX_SEED_LEDGER` without `ZPKX_SEED_FROM` is an
-error. Nothing else carries a seed.
+No environment variable turns a seed on. zpkx sets `ZPKX_SEEDED` for the command
+it runs, as information for it (a factory learns that a seed is in force and
+must name it); zpkx never reads it to start a seed, and while it is set a
+`--seed-from` flag is refused, so a seed pass is started once, by the factory's
+own invocation.
 
 ## Design
 

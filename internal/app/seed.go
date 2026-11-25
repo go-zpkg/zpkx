@@ -61,39 +61,36 @@ func takeSeedFlags(argv []string) (from, ledger string, rest []string, err error
 	return from, ledger, rest, nil
 }
 
-// The environment variables that carry the seed to the processes zpkx starts
-// (the factory, and the zpkx a build script calls for its own dependencies):
-// each of them is a new process and reads its own flags, so the seed travels
-// the one way a process hands anything to its children. Set only inside
-// runSeeded, restored on return, and read only when no flag was given.
-const (
-	seedFromEnv_   = "ZPKX_SEED_FROM"
-	seedLedgerEnv_ = "ZPKX_SEED_LEDGER"
-)
+// SeededEnv is the marker zpkx puts in the environment of the command it runs
+// under a seed. It is INFORMATION for that command (the factory learns that a
+// seed is in force and must name it), never an instruction: zpkx does not read
+// it to turn a seed on, so nothing a recipe sets can start one. While it is
+// present a seed flag is refused, because a seed pass is started once, by the
+// factory's own invocation, and a second seeded zpkx below it would install
+// artifacts that no ledger the factory holds records.
+const SeededEnv = "ZPKX_SEEDED"
 
-// seedActive is true while runSeeded's body runs, so the run that body makes
-// does not read the environment runSeeded itself set, and seed a second time.
-var seedActive bool
-
-// seedFromEnv is the environment spelling of the leading flags.
-func seedFromEnv(getenv func(string) string) (from, ledger string, err error) {
-	from, ledger = getenv(seedFromEnv_), getenv(seedLedgerEnv_)
-	if ledger != "" && from == "" {
-		return "", "", fmt.Errorf("%s needs %s", seedLedgerEnv_, seedFromEnv_)
+// refuseNestedSeed is the refusal of a seed flag below a seed that is already
+// in force.
+func refuseNestedSeed(getenv func(string) string, from string) error {
+	if from != "" && getenv(SeededEnv) != "" {
+		return fmt.Errorf("a seed is already in force (%s is set) and a seed pass is started once, by the factory: --seed-from is refused here", SeededEnv)
 	}
-	return from, ledger, nil
+	return nil
 }
 
-// runSeeded runs body with the seed source in force when from is set.
+// runSeeded runs body with the seed source in force when from is set. The
+// ledger is required: a seed that is not recorded is not installed.
 func runSeeded(from, ledger string, body func() int) int {
 	if from == "" {
 		return body()
 	}
-	defer setenvRestored(seedFromEnv_, from)()
-	defer setenvRestored(seedLedgerEnv_, ledger)()
-	seedActive = true
-	defer func() { seedActive = false }()
-	artifact.SetSeedLedgerFile(ledger) // "" means none
+	if ledger == "" {
+		fmt.Fprintln(os.Stderr, pfx()+"seed: --seed-from needs --seed-ledger: a seed that is not recorded is not installed")
+		return 2
+	}
+	defer setenvRestored(SeededEnv, from)()
+	artifact.SetSeedLedgerFile(ledger)
 	defer artifact.SetSeedLedgerFile("")
 	code := 0
 	if err := artifact.WithSeedSource(from, func() error { code = body(); return nil }); err != nil {
