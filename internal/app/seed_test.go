@@ -1,7 +1,10 @@
 package app
 
 import (
+	"io"
+	"os"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/go-zpkg/artifact"
@@ -76,8 +79,45 @@ func TestASeedWithoutVerifiedSignaturesIsRefused(t *testing.T) {
 	}
 }
 
-func TestRunRefusesALedgerWithoutASeed(t *testing.T) {
-	if rc := run([]string{"--seed-ledger", "l", "+gnu.org/make"}); rc != 2 {
-		t.Fatalf("rc = %d, want 2", rc)
+func captureStderr(t *testing.T, f func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stderr
+	os.Stderr = w
+	done := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(r)
+		done <- string(b)
+	}()
+	f()
+	os.Stderr = old
+	w.Close()
+	return <-done
+}
+
+func TestRunRefusesAMalformedSeedFlagAndSaysWhy(t *testing.T) {
+	for _, argv := range [][]string{
+		{"--seed-ledger", "l", "+gnu.org/make"},
+		{"--seed-from"},
+		{"--seed-from", "", "-v"},
+	} {
+		var rc int
+		msg := captureStderr(t, func() { rc = run(argv) })
+		if rc != 2 || !strings.Contains(msg, "--seed-") {
+			t.Errorf("%q: rc=%d stderr=%q", argv, rc, msg)
+		}
+	}
+}
+
+// The seed flags reach the seed machinery: a refused seed stops the command
+// before it is looked up, whatever follows.
+func TestRunStopsWhenTheSeedIsRefused(t *testing.T) {
+	var rc int
+	msg := captureStderr(t, func() { rc = run([]string{"--seed-from", "http://dist.pkgx.dev", "-v"}) })
+	if rc != 1 || !strings.Contains(msg, "seed:") {
+		t.Fatalf("rc=%d stderr=%q", rc, msg)
 	}
 }

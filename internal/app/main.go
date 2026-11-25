@@ -279,10 +279,6 @@ func run(argv []string) int {
 	if seedFrom != "" {
 		return runSeeded(seedFrom, seedLedger, func() int { return run(argv) })
 	}
-	if len(argv) == 0 {
-		fmt.Fprint(os.Stderr, usage)
-		return 2
-	}
 
 	switch argv[0] {
 	case "-h", "--help":

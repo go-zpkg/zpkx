@@ -32,13 +32,13 @@ func takeSeedFlags(argv []string) (from, ledger string, rest []string, err error
 			val = rest[1]
 		}
 		if val == "" {
-			return "", "", nil, fmt.Errorf("%s needs a value", rest[0])
+			return "", "", argv, fmt.Errorf("%s needs a value", rest[0])
 		}
 		*dst = val
 		rest = rest[min(2, len(rest)):]
 	}
 	if ledger != "" && from == "" {
-		return "", "", nil, fmt.Errorf("--seed-ledger needs --seed-from")
+		return "", "", argv, fmt.Errorf("--seed-ledger needs --seed-from")
 	}
 	return from, ledger, rest, nil
 }
