@@ -1430,6 +1430,12 @@ must name it); zpkx never reads it to start a seed, and while it is set a
 `--seed-from` flag is refused, so a seed pass is started once, by the factory's
 own invocation.
 
+`zpkx --seed-digest seed.jsonl` prints `sha256:<hex>`, the digest of the
+ledger's canonical form (an empty or unreadable ledger is an error). The build's
+OUTSIDE records it right after the seed install and passes it to
+`zpkb factory --seed-ledger-sha256`, so a recipe that rewrites the ledger
+afterwards is refused by the factory.
+
 ## Design
 
 Pure Go, cgo disabled. On `FROM scratch` it reads each artifact's ELF `DT_NEEDED`
