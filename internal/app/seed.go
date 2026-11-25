@@ -93,10 +93,8 @@ func runSeeded(from, ledger string, body func() int) int {
 	defer setenvRestored(seedLedgerEnv_, ledger)()
 	seedActive = true
 	defer func() { seedActive = false }()
-	if ledger != "" {
-		artifact.SetSeedLedgerFile(ledger)
-		defer artifact.SetSeedLedgerFile("")
-	}
+	artifact.SetSeedLedgerFile(ledger) // "" means none
+	defer artifact.SetSeedLedgerFile("")
 	code := 0
 	if err := artifact.WithSeedSource(from, func() error { code = body(); return nil }); err != nil {
 		fmt.Fprintln(os.Stderr, pfx()+"seed: "+err.Error())
