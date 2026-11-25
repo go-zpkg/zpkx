@@ -45,15 +45,21 @@ func TestSeedDigestRefusesWhatIsNotOneNonEmptyLedger(t *testing.T) {
 	if err := os.WriteFile(empty, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	for name, args := range map[string][]string{
-		"no argument":   nil,
-		"two arguments": {"a", "b"},
-		"missing file":  {filepath.Join(t.TempDir(), "nope")},
-		"empty ledger":  {empty},
+	for _, c := range []struct {
+		name string
+		args []string
+		code int
+		want string
+	}{
+		{"no argument", nil, 2, "usage"},
+		{"two arguments", []string{empty, empty}, 2, "usage"},
+		{"missing file", []string{filepath.Join(t.TempDir(), "nope")}, 1, "no such file"},
+		{"empty ledger", []string{empty}, 1, "is empty"},
 	} {
 		var out, errw bytes.Buffer
-		if code := seedDigest(args, &out, &errw); code == 0 || out.Len() != 0 || errw.Len() == 0 {
-			t.Errorf("%s: exit %d, stdout %q, stderr %q", name, code, out.String(), errw.String())
+		code := seedDigest(c.args, &out, &errw)
+		if code != c.code || out.Len() != 0 || !strings.Contains(errw.String(), c.want) {
+			t.Errorf("%s: exit %d (want %d), stdout %q, stderr %q (want %q)", c.name, code, c.code, out.String(), errw.String(), c.want)
 		}
 	}
 }
