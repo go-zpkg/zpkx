@@ -117,7 +117,7 @@ env:
   ZPKG_CATALOG read the catalogue from this file instead of $ZPKG_DIR/catalog —
                for an air-gapped image, or to inspect one before publishing.
                Named and unreadable is an error, not a quiet fallback
-  ZPKG_DIST    artifact source (default: oci://ghcr.io/go-pkgx/packages, the signed
+  ZPKG_DIST    artifact source (default: oci://ghcr.io/go-zpkg/packages, the signed
                registry; set https://dist.pkgx.dev for the full unsigned upstream
                pantry — pair with ZPKG_VERIFY=0)
   ZPKG_VERIFY  verify artifact signatures, fail-closed (default: on; set
@@ -270,6 +270,18 @@ func run(argv []string) int {
 	if len(argv) == 0 {
 		fmt.Print(usage)
 		return 0
+	}
+	seedFrom, seedLedger, argv, serr := takeSeedFlags(argv)
+	if serr != nil {
+		fmt.Fprintln(os.Stderr, pfx()+serr.Error())
+		return 2
+	}
+	if seedFrom != "" {
+		return runSeeded(seedFrom, seedLedger, func() int { return run(argv) })
+	}
+	if len(argv) == 0 {
+		fmt.Fprint(os.Stderr, usage)
+		return 2
 	}
 
 	switch argv[0] {

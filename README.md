@@ -1386,21 +1386,17 @@ environment variable always overrides a value set here:
 ```hcl2
 # ~/.zpkg/config.hcl2 — defaults for the go-zpkg tools.
 # A real environment variable always overrides a value set here.
-ZPKG_DIST   = "oci://ghcr.io/go-pkgx/packages"  # signed registry (default)
+ZPKG_DIST   = "oci://ghcr.io/go-zpkg/packages"  # signed registry (default)
 ZPKG_VERIFY = true                               # fail-closed signature check
 # ZPKG_DIR    = "/opt/zpkg"
 # ZPKG_RECIPES = "https://raw.githubusercontent.com/pkgxdev/pantry/main/projects"
 # OCI_TOKEN   = "..."                            # private-registry credentials
 ```
 
-⛔ **Two of those defaults are dependencies being wound down, and the file
-does not say so on its own.** `ZPKG_DIST` points at `ghcr.io/go-pkgx/packages`
-because GitHub's container packages are **org-scoped and did not follow the
-repository transfer** — every repository moved and every artifact stayed, so
-that registry is the live one and spelling the new name here would point at an
-empty namespace (it shipped that way once, in v0.64.0 through v0.68.0).
-`ZPKG_RECIPES` defaults to `pkgxdev/pantry` because the resolver still reads it
-with our own recipes merged over the top (`artifact/zpkg.go:68`).
+⛔ **`ZPKG_RECIPES` is a dependency being wound down, and the file does not say
+so on its own.** It defaults to `pkgxdev/pantry` because the resolver still
+reads it with our own recipes merged over the top (`artifact/zpkg.go:68`).
+`ZPKG_DIST` now defaults to our own `ghcr.io/go-zpkg/packages`.
 
 Both end the same way and in this order: recipes **written** from each
 project's own build files — not converted, because that corpus carries no
@@ -1411,6 +1407,21 @@ licence to convert (go-zpkg/packages#431) — then **built** into
 Values may be strings, booleans, or numbers. A missing file is ignored; a
 malformed one is reported once on stderr and otherwise ignored (the tools fall
 back to environment variables and built-in defaults).
+
+## Seeding a bootstrap pass
+
+```sh
+zpkx --seed-from oci://ghcr.io/go-pkgx/packages --seed-ledger seed.jsonl +gnu.org/make -- make
+```
+
+`--seed-from` stages the build environment from somebody else's registry for
+ONE bootstrap pass, with every package's signature verified (it is refused
+with `ZPKG_VERIFY=0` and for HTTP sources). The seed is a build environment and
+nothing else: it is never a dependency source (`ZPKG_DIST` still refuses it),
+and every seed artifact installed is appended to `--seed-ledger` (project,
+version, digest, signers, source) so the factory can name it in the provenance
+of what it builds. Both flags are read only BEFORE the command, never from the
+program's own arguments; `--seed-ledger` without `--seed-from` is an error.
 
 ## Design
 
