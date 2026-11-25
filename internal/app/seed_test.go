@@ -3,6 +3,7 @@ package app
 import (
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -46,7 +47,7 @@ func TestASeedIsAcceptedAsABuildEnvironmentAndNothingElse(t *testing.T) {
 	t.Setenv("ZPKG_VERIFY", "1")
 	oldBase := artifact.DistBase
 	var seen string
-	rc := runSeeded("oci://ghcr.io/go-pkgx/packages", "", func() int { seen = artifact.DistBase; return 7 })
+	rc := runSeeded("oci://ghcr.io/go-pkgx/packages", filepath.Join(t.TempDir(), "l"), func() int { seen = artifact.DistBase; return 7 })
 	if rc != 7 || seen != "oci://ghcr.io/go-pkgx/packages" {
 		t.Fatalf("rc=%d DistBase during=%q", rc, seen)
 	}
@@ -69,12 +70,13 @@ func TestWithoutASeedTheBodyRunsWithTheDefaultSource(t *testing.T) {
 
 func TestASeedWithoutVerifiedSignaturesIsRefused(t *testing.T) {
 	called := false
-	if rc := runSeeded("http://dist.pkgx.dev", "", func() int { called = true; return 0 }); rc != 1 || called {
+	ledger := filepath.Join(t.TempDir(), "l")
+	if rc := runSeeded("http://dist.pkgx.dev", ledger, func() int { called = true; return 0 }); rc != 1 || called {
 		t.Fatalf("an HTTP seed ran: rc=%d called=%v", rc, called)
 	}
 	t.Setenv("ZPKG_VERIFY", "0")
 	called = false
-	if rc := runSeeded("oci://ghcr.io/go-pkgx/packages", "", func() int { called = true; return 0 }); rc != 1 || called {
+	if rc := runSeeded("oci://ghcr.io/go-pkgx/packages", ledger, func() int { called = true; return 0 }); rc != 1 || called {
 		t.Fatalf("an unverified seed ran: rc=%d called=%v", rc, called)
 	}
 }
@@ -116,64 +118,70 @@ func TestRunRefusesAMalformedSeedFlagAndSaysWhy(t *testing.T) {
 // before it is looked up, whatever follows.
 func TestRunStopsWhenTheSeedIsRefused(t *testing.T) {
 	var rc int
-	msg := captureStderr(t, func() { rc = run([]string{"--seed-from", "http://dist.pkgx.dev", "-v"}) })
+	msg := captureStderr(t, func() {
+		rc = run([]string{"--seed-from", "http://dist.pkgx.dev", "--seed-ledger", filepath.Join(t.TempDir(), "l"), "-v"})
+	})
 	if rc != 1 || !strings.Contains(msg, "seed:") {
 		t.Fatalf("rc=%d stderr=%q", rc, msg)
 	}
 }
 
-func TestTheSeedTravelsToChildrenThroughTheEnvironmentAndNowhereElse(t *testing.T) {
+func TestTheSeedIsMarkedForTheCommandAndTheMarkerIsRestored(t *testing.T) {
 	t.Setenv("ZPKG_VERIFY", "1")
-	t.Setenv(seedFromEnv_, "")
-	os.Unsetenv(seedFromEnv_)
-	os.Unsetenv(seedLedgerEnv_)
-	var from, ledger string
-	runSeeded("oci://ghcr.io/go-pkgx/packages", "/l/seed.jsonl", func() int {
-		from, ledger = os.Getenv(seedFromEnv_), os.Getenv(seedLedgerEnv_)
+	os.Unsetenv(SeededEnv)
+	var marker string
+	runSeeded("oci://ghcr.io/go-pkgx/packages", filepath.Join(t.TempDir(), "l"), func() int {
+		marker = os.Getenv(SeededEnv)
 		return 0
 	})
-	if from != "oci://ghcr.io/go-pkgx/packages" || ledger != "/l/seed.jsonl" {
-		t.Fatalf("children would see %q %q", from, ledger)
+	if marker != "oci://ghcr.io/go-pkgx/packages" {
+		t.Fatalf("the command would see the marker %q", marker)
 	}
-	if _, ok := os.LookupEnv(seedFromEnv_); ok {
-		t.Error("the seed source stayed in the environment after the call")
-	}
-	if _, ok := os.LookupEnv(seedLedgerEnv_); ok {
-		t.Error("the ledger stayed in the environment after the call")
-	}
-	// An earlier value comes back.
-	t.Setenv(seedLedgerEnv_, "before")
-	runSeeded("oci://ghcr.io/go-pkgx/packages", "", func() int { return 0 })
-	if os.Getenv(seedLedgerEnv_) != "before" {
-		t.Errorf("ledger env = %q, want it restored", os.Getenv(seedLedgerEnv_))
+	if _, ok := os.LookupEnv(SeededEnv); ok {
+		t.Error("the marker stayed in the environment after the call")
 	}
 }
 
-func TestTheEnvironmentSpellingIsTheFlagsSpelling(t *testing.T) {
-	get := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
-	if f, l, err := seedFromEnv(get(map[string]string{seedFromEnv_: "oci://x", seedLedgerEnv_: "l"})); err != nil || f != "oci://x" || l != "l" {
-		t.Errorf("both: %q %q %v", f, l, err)
+// F1: no environment spelling turns a seed on. A recipe that sets what zpkx
+// used to read gets the ordinary run, not a seed.
+func TestNoEnvironmentVariableStartsASeed(t *testing.T) {
+	for _, k := range []string{"ZPKX_SEED_FROM", "ZPKX_SEED_LEDGER", SeededEnv} {
+		t.Setenv(k, "http://dist.pkgx.dev")
 	}
-	if f, l, err := seedFromEnv(get(nil)); err != nil || f != "" || l != "" {
-		t.Errorf("none: %q %q %v", f, l, err)
-	}
-	if _, _, err := seedFromEnv(get(map[string]string{seedLedgerEnv_: "l"})); err == nil {
-		t.Error("a ledger with no seed was accepted")
-	}
-}
-
-func TestRunReadsTheSeedFromTheEnvironmentAndRefusesIt(t *testing.T) {
-	t.Setenv(seedFromEnv_, "http://dist.pkgx.dev")
-	t.Setenv(seedLedgerEnv_, "")
 	var rc int
 	msg := captureStderr(t, func() { rc = run([]string{"-v"}) })
-	if rc != 1 || !strings.Contains(msg, "seed:") {
+	if rc != 0 || strings.Contains(msg, "seed") {
+		t.Fatalf("an environment variable reached the seed machinery: rc=%d stderr=%q", rc, msg)
+	}
+}
+
+// A seed pass is started once. Below one, a seed flag is refused before the
+// seed machinery sees it.
+func TestASeedFlagBelowASeedIsRefused(t *testing.T) {
+	t.Setenv(SeededEnv, "oci://ghcr.io/go-pkgx/packages")
+	var rc int
+	msg := captureStderr(t, func() {
+		rc = run([]string{"--seed-from", "oci://ghcr.io/go-pkgx/packages", "--seed-ledger", filepath.Join(t.TempDir(), "other"), "-v"})
+	})
+	if rc != 2 || !strings.Contains(msg, "already in force") {
 		t.Fatalf("rc=%d stderr=%q", rc, msg)
 	}
-	t.Setenv(seedFromEnv_, "")
-	t.Setenv(seedLedgerEnv_, "l")
-	msg = captureStderr(t, func() { rc = run([]string{"-v"}) })
-	if rc != 2 || !strings.Contains(msg, seedLedgerEnv_) {
-		t.Fatalf("rc=%d stderr=%q", rc, msg)
+	if err := refuseNestedSeed(func(string) string { return "" }, "oci://x"); err != nil {
+		t.Errorf("a first seed was refused: %v", err)
+	}
+	if err := refuseNestedSeed(func(string) string { return "x" }, ""); err != nil {
+		t.Errorf("a run with no seed flag was refused: %v", err)
+	}
+}
+
+func TestASeedWithoutALedgerIsRefusedBeforeItRuns(t *testing.T) {
+	t.Setenv("ZPKG_VERIFY", "1")
+	called := false
+	var rc int
+	msg := captureStderr(t, func() {
+		rc = runSeeded("oci://ghcr.io/go-pkgx/packages", "", func() int { called = true; return 0 })
+	})
+	if rc != 2 || called || !strings.Contains(msg, "--seed-ledger") {
+		t.Fatalf("rc=%d called=%v stderr=%q", rc, called, msg)
 	}
 }
