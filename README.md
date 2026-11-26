@@ -1430,7 +1430,8 @@ be an open pipe (anything else, or a closed descriptor, is refused before any
 seed is installed), and zpkx writes each entry to it directly, so no path is
 opened and nothing in the filesystem (a `/dev/fd` that is missing or was
 replaced) can change where the ledger goes. A process that is handed the
-descriptor can append to it, and a process of the same user or root can reach it
+descriptor can append to it, but zpkx marks it close-on-exec, so the command it
+runs under the seed (the build) does not inherit it. A process of the same user or root can reach it
 through `/proc`: the reader still has to check the ledger against what was
 staged.
 

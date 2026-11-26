@@ -91,12 +91,19 @@ func takeSeedFlags(argv []string) (from, ledger string, fd int, rest []string, e
 func ledgerFromFD(fd int) (*os.File, error) {
 	f := os.NewFile(uintptr(fd), "seed-ledger")
 	st, err := f.Stat()
+	// Each refusal stands on its own condition, so that dropping either one
+	// returns a descriptor it should not (a value a test asserts on), where a
+	// shared early return would leave a nil st to be dereferenced.
+	if err == nil && st.Mode()&os.ModeNamedPipe == 0 {
+		return nil, fmt.Errorf("--seed-ledger-fd %d is not a pipe", fd)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("--seed-ledger-fd %d: %w", fd, err)
 	}
-	if st.Mode()&os.ModeNamedPipe == 0 {
-		return nil, fmt.Errorf("--seed-ledger-fd %d is not a pipe", fd)
-	}
+	// The write end must not reach what zpkx runs: the command zpkx execs under
+	// the seed is the build, and a descriptor it inherits is a way to write the
+	// ledger from recipe code.
+	closeOnExec(fd)
 	return f, nil
 }
 
@@ -107,11 +114,15 @@ func ledgerFromFD(fd int) (*os.File, error) {
 // ledger afterwards is caught by the factory. An empty or unreadable ledger is
 // an error: the pass installed nothing from its seed.
 func seedDigest(args []string, stdout, stderr io.Writer) int {
+	path := ""
+	if len(args) == 1 {
+		path = args[0]
+	}
 	if len(args) != 1 {
 		fmt.Fprintln(stderr, pfx()+"seed-digest: usage: zpkx --seed-digest <ledger>")
 		return 2
 	}
-	es, err := artifact.ReadSeedLedger(args[0])
+	es, err := artifact.ReadSeedLedger(path)
 	if err != nil {
 		fmt.Fprintln(stderr, pfx()+"seed-digest: "+err.Error())
 		return 1
