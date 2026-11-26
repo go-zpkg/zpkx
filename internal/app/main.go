@@ -271,7 +271,7 @@ func run(argv []string) int {
 		fmt.Print(usage)
 		return 0
 	}
-	seedFrom, seedLedger, argv, serr := takeSeedFlags(argv)
+	seedFrom, seedLedger, seedFD, argv, serr := takeSeedFlags(argv)
 	if serr == nil {
 		serr = refuseNestedSeed(os.Getenv, seedFrom)
 	}
@@ -280,7 +280,7 @@ func run(argv []string) int {
 		return 2
 	}
 	if seedFrom != "" {
-		return runSeeded(seedFrom, seedLedger, func() int { return run(argv) })
+		return runSeeded(seedFrom, seedLedger, seedFD, func() int { return run(argv) })
 	}
 
 	switch argv[0] {

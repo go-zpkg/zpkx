@@ -1421,8 +1421,18 @@ nothing else: it is never a dependency source (`ZPKG_DIST` still refuses it),
 and every seed artifact installed is appended to `--seed-ledger` (project,
 version, digest, signers, source) so the factory can name it in the provenance
 of what it builds. Both flags are read only BEFORE the command, never from the
-program's own arguments; `--seed-ledger` is required with `--seed-from`, and
+program's own arguments; a ledger is required with `--seed-from`, and
 `--seed-from` is accepted only for the one registry the artifact library pins.
+
+`--seed-ledger-fd N` (N is 3 or more) names the ledger as a descriptor zpkx
+already holds, in place of `--seed-ledger <file>`; the two are exclusive. It must
+be an open pipe (anything else, or a closed descriptor, is refused before any
+seed is installed), and zpkx writes each entry to it directly, so no path is
+opened and nothing in the filesystem (a `/dev/fd` that is missing or was
+replaced) can change where the ledger goes. A process that is handed the
+descriptor can append to it, and a process of the same user or root can reach it
+through `/proc`: the reader still has to check the ledger against what was
+staged.
 
 No environment variable turns a seed on. zpkx sets `ZPKX_SEEDED` for the command
 it runs, as information for it (a factory learns that a seed is in force and
