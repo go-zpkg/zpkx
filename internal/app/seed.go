@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/go-zpkg/artifact"
@@ -34,15 +35,25 @@ func setenvRestored(key, v string) func() {
 // never a dependency source. The flags are only honoured before the command,
 // so a program's own arguments can never switch it on; --seed-ledger without
 // --seed-from is an error, not a silent no-op.
-func takeSeedFlags(argv []string) (from, ledger string, rest []string, err error) {
+//
+// `--seed-ledger-fd N` names the ledger as a descriptor this process already
+// holds, inherited from the process that started it (N is 3 or more), instead
+// of a file: nothing is looked up by path, so it cannot be missing in the build
+// environment or resolve to a file somebody else made. It is exclusive with
+// --seed-ledger. fd is -1 when the flag is absent.
+func takeSeedFlags(argv []string) (from, ledger string, fd int, rest []string, err error) {
 	rest = argv
+	fd = -1
 	for len(rest) > 0 {
 		var dst *string
+		var fdText string
 		switch rest[0] {
 		case "--seed-from":
 			dst = &from
 		case "--seed-ledger":
 			dst = &ledger
+		case "--seed-ledger-fd":
+			dst = &fdText
 		}
 		if dst == nil {
 			break
@@ -52,15 +63,41 @@ func takeSeedFlags(argv []string) (from, ledger string, rest []string, err error
 			val = rest[1]
 		}
 		if val == "" {
-			return "", "", argv, fmt.Errorf("%s needs a value", rest[0])
+			return "", "", -1, argv, fmt.Errorf("%s needs a value", rest[0])
 		}
-		*dst = val
+		if dst == &fdText {
+			n, aerr := strconv.Atoi(val)
+			if aerr != nil || n < 3 {
+				return "", "", -1, argv, fmt.Errorf("--seed-ledger-fd needs a descriptor number, 3 or more: %q", val)
+			}
+			fd = n
+		} else {
+			*dst = val
+		}
 		rest = rest[min(2, len(rest)):]
 	}
-	if ledger != "" && from == "" {
-		return "", "", argv, fmt.Errorf("--seed-ledger needs --seed-from")
+	if fd >= 0 && ledger != "" {
+		return "", "", -1, argv, fmt.Errorf("--seed-ledger and --seed-ledger-fd name two ledgers: give one")
 	}
-	return from, ledger, rest, nil
+	if (ledger != "" || fd >= 0) && from == "" {
+		return "", "", -1, argv, fmt.Errorf("--seed-ledger needs --seed-from")
+	}
+	return from, ledger, fd, rest, nil
+}
+
+// ledgerFromFD is the descriptor fd as the seed ledger. It must be a pipe that
+// is open: a descriptor that is closed, or a file, a terminal or a socket the
+// caller did not mean, is refused here rather than written to.
+func ledgerFromFD(fd int) (*os.File, error) {
+	f := os.NewFile(uintptr(fd), "seed-ledger")
+	st, err := f.Stat()
+	if err != nil {
+		return nil, fmt.Errorf("--seed-ledger-fd %d: %w", fd, err)
+	}
+	if st.Mode()&os.ModeNamedPipe == 0 {
+		return nil, fmt.Errorf("--seed-ledger-fd %d is not a pipe", fd)
+	}
+	return f, nil
 }
 
 // seedDigest is `zpkx --seed-digest <ledger>`: it prints sha256:<hex>, the
@@ -133,17 +170,28 @@ func refuseUnderSeed(getenv func(string) string, root bool, plus, rest []string)
 
 // runSeeded runs body with the seed source in force when from is set. The
 // ledger is required: a seed that is not recorded is not installed.
-func runSeeded(from, ledger string, body func() int) int {
+func runSeeded(from, ledger string, fd int, body func() int) int {
 	if from == "" {
 		return body()
 	}
-	if ledger == "" {
-		fmt.Fprintln(os.Stderr, pfx()+"seed: --seed-from needs --seed-ledger: a seed that is not recorded is not installed")
+	if ledger == "" && fd < 0 {
+		fmt.Fprintln(os.Stderr, pfx()+"seed: --seed-from needs --seed-ledger or --seed-ledger-fd: a seed that is not recorded is not installed")
 		return 2
 	}
+	if fd >= 0 {
+		f, err := ledgerFromFD(fd)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, pfx()+"seed: "+err.Error())
+			return 2
+		}
+		artifact.SetSeedLedgerFD(f)
+		defer artifact.SetSeedLedgerFD(nil)
+	}
 	defer setenvRestored(SeededEnv, from)()
-	artifact.SetSeedLedgerFile(ledger)
-	defer artifact.SetSeedLedgerFile("")
+	if ledger != "" {
+		artifact.SetSeedLedgerFile(ledger)
+		defer artifact.SetSeedLedgerFile("")
+	}
 	seedRoot = true
 	defer func() { seedRoot = false }()
 	code := 0
