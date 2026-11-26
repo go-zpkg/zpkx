@@ -3,9 +3,12 @@
 package app
 
 import (
+	"io"
 	"os"
+	osexec "os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -75,6 +78,35 @@ func TestOnlyAnOpenPipeIsALedgerDescriptor(t *testing.T) {
 		if _, err := ledgerFromFD(fd); err == nil {
 			t.Errorf("%s accepted as the ledger", name)
 		}
+	}
+}
+
+// What zpkx runs under a seed is the build; the ledger's write end must not be
+// among its descriptors, or recipe code could write an entry. The descriptor is
+// handed over inheritable (as a parent's ExtraFiles leaves it), and a child
+// started after ledgerFromFD must find it closed.
+func TestTheLedgerDescriptorIsNotInheritedByWhatRuns(t *testing.T) {
+	pr, pw, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer pr.Close()
+	defer pw.Close()
+	fd := dupFD(t, pw)
+	f, err := ledgerFromFD(fd)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	child := osexec.Command("/bin/sh", "-c", "echo forged >&"+strconv.Itoa(fd))
+	if err := child.Run(); err == nil {
+		t.Fatalf("a child wrote to descriptor %d: it is inherited", fd)
+	}
+	// Close the only writers left and read what the pipe holds: nothing.
+	pw.Close()
+	f.Close()
+	if b, _ := io.ReadAll(pr); len(b) != 0 {
+		t.Fatalf("the pipe holds %q", b)
 	}
 }
 
